@@ -9,7 +9,6 @@ module Main where
 import Text.Printf -- Oba, Haskell tem printf! :-)
 import Data.List
 import System.Random
-import System.IO.Unsafe
 
 type Point     = (Float,Float)
 type Color     = (Int,Int,Int)
@@ -28,7 +27,7 @@ main = do
         strcontent <- readFile infile
         let pairs = map (span (/= ' ')) (lines strcontent)
             freqs = readInts (map snd pairs)
-        writeFile outfile (svgCloudGen imageWidth imageHeight freqs)
+        writeFile outfile (svgCloudGen imageWidth imageHeight (reverse (sort(freqs))))
         putStrLn "Ok!"
         where 
                 infile = "dataset.txt"
@@ -59,9 +58,9 @@ svgBubbleGen w h dataset = [svgCircle ((fromIntegral w/2, fromIntegral h/2), (he
 --corolação
 cores :: Int -> Color
 cores raio = let
-             r = unsafePerformIO (getStdRandom (randomR (0,255::Int)))
-             g = unsafePerformIO (getStdRandom (randomR (0,255::Int)))
-             b = unsafePerformIO (getStdRandom (randomR (0,255::Int)))
+             r = 255
+             g = 0
+             b = 0
              in (r,g,b)
 
 -- Gera string representando um circulo em SVG. A cor do circulo esta fixa. 
@@ -83,38 +82,11 @@ geraCirculos :: Int -> Int -> [Int] -> [Circle]
 geraCirculos w h dataset = [((180,180), 50)]
 
 --Gera a posicao dos Circulos
-posicaoCirculos :: [Circle] -> Float -> Float -> Float -> Point -> [Circle]
-posicaoCirculos circulo a t raio centro = if (testaposicao == True) then circulo
-                                          else (posicaoCirculos circulo a (t + 45)) raio centro
-
-testaposicao :: Circle -> Float -> Float -> Point
-testaposicao circ a t = let
+posicaoCirculos :: Float -> Float -> Point
+posicaoCirculos a t = let
                         x = a * t * (cos t)
                         y = a * t * (sin (t))
                         in (x, y)
                         
---Distancia dos circulos
-distanciaCirc :: Point -> Point -> Float
-distanciaCirc (a1, b1) (a2, b2) = let
-                                x = (a2 - a1) ^ 2
-                                y = (b2 - b1) ^ 2
-                                d = x + y
-                                in sqrt d 
---Analisa a distancia
-analisaDistancia :: Circle -> Circle -> Bool
-analisaDistancia c1 c2 = if (distanciaCirc (fst c1) (fst c2)) > 0.1 then True else False
 
---Verifica ponto a ponto
-validaPonto :: [Circle] -> Circle -> [Bool]
-validaPonto [] _ = []
-validaPonto listc circ = analisaDistancia (head listc) circ : (validaPonto (tail listc) circ)
-
-
---Extrai Raios 
-extraiRaio :: [Int] -> [Float]
-extraiRaio [] = []
-extraiRaio dataset = let 
-                a = (head dataset)
-                b = ((fromIntegral a)/100) + 3
-                in b : extraiRaio (tail dataset)
                                             
