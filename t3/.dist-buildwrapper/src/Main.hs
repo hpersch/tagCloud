@@ -34,9 +34,6 @@ main = do
                 infile = "dataset.txt"
                 outfile = "tagcloud.svg"
 
---Frequencia e raios
-
-
 -- Transforma lista de strings em lista de inteiros
 readInts :: [String] -> [Int]
 readInts ss = map read ss
@@ -54,20 +51,19 @@ svgCloudGen w h dataset =
 -- A implementacao atual eh apenas um teste que gera um circulo posicionado no meio da figura.
 -- TODO: Alterar essa funcao para usar os dados do dataset.
 svgBubbleGen:: Int -> Int -> [Int] -> [String]
-svgBubbleGen w h dataset = [geraTag (fromIntegral w/2, fromIntegral h/2), (reverse (sort (extraiRaio dataset)))]
+svgBubbleGen w h dataset = let
+                           raios = reverse (sort (extraiRaio dataset))
+                           in [geracao (fromIntegral w/2) (fromIntegral h/2) raios]
 
 --corolação
-cores ::  Color
-cores = let
-             r = unsafePerformIO (getStdRandom (randomR (0,255::Int)))
-             g = unsafePerformIO (getStdRandom (randomR (0,255::Int)))
-             b = unsafePerformIO (getStdRandom (randomR (0,255::Int)))
-             in (r,g,b)
+cores ::  IO Int
+cores = randomRIO (0,255::Int)
+           
 
 -- Gera string representando um circulo em SVG. A cor do circulo esta fixa. 
 -- TODO: Alterar esta funcao para mostrar um circulo de uma cor fornecida como parametro.
-svgCircle :: Circle -> Color -> String
-svgCircle ((x,y),r) (r1,g,b) = printf "<circle cx=\"%f\" cy=\"%f\" r=\"%f\" fill=\"rgb(%d, %d, %d)\" />\n" x y r r1 g b
+svgCircle :: Circle -> String
+svgCircle ((x,y),raio) = printf "<circle cx=\"%f\" cy=\"%f\" r=\"%f\" fill=\"rgb(%d, %d, %d)\" />\n" x y raio (unsafePerformIO cores) (unsafePerformIO cores) (unsafePerformIO cores) 
 
 
 -- Configura o viewBox da imagem e coloca retangulo branco no fundo
@@ -78,20 +74,19 @@ svgViewBox w h =
         printf "<rect x=\"0\" y=\"0\" width=\"%d\" height=\"%d\" style=\"fill:white;\"/>\n" w h
         
 
---Gera lista de circulos
-geraCirculos :: Int -> Int -> [Int] -> [Circle]
-geraCirculos w h dataset = [((180,180), 50)]
-
 --Gera a posicao dos Circulos
 posicaoCirculos :: [Circle] -> Float -> Float -> Float -> Point -> [Circle]
-posicaoCirculos circulo a t raio centro = if (testaposicao ((head circulo) a t raio centro) == True) then circulo
-                                          else (posicaoCirculos circulo a (t + 45)) raio centro
+posicaoCirculos circulo a t raio centro = 
+                        let ponto = testaPosicao centro a t
+                            ver = validaPonto circulo ((ponto), raio)
+                        in if (and ver == True) then [((ponto), raio)]
+                           else posicaoCirculos circulo a (t + 70) raio centro
 
-testaposicao :: Circle -> Float -> Float -> Float -> Point -> Bool
-testaposicao circ a t r p = let
-                        x = (fst p) + a * t * (cos t)
-                        y = (snd p) + a * t * (sin (t))
-                        in validaPonto circ ((x, y), r)
+testaPosicao :: Point -> Float -> Float -> Point
+testaPosicao c a t = let
+                        x = (fst c) + (a * t * (cos t))
+                        y = (snd c) + (a * t * (sin t))
+                        in (x, y)
                         
 --Distancia dos circulos
 distanciaCirc :: Point -> Point -> Float
@@ -103,12 +98,12 @@ distanciaCirc (a1, b1) (a2, b2) = let
 
 --Analisa a distancia
 analisaDistancia :: Circle -> Circle -> Bool
-analisaDistancia c1 c2 = if (distanciaCirc (fst c1) (fst c2)) > 0.1 then True else False
+analisaDistancia ((x1,y1), r1) ((x2,y2), r2) = if (distanciaCirc (x1,y1) (x2,y2)) >= 0.1 then True else False
 
 --Verifica ponto a ponto
 validaPonto :: [Circle] -> Circle -> [Bool]
 validaPonto [] _ = []
-validaPonto listc circ = analisaDistancia (head listc) circ : (validaPonto (tail listc) circ)
+validaPonto listc circ = analisaDistancia (head listc) circ : validaPonto (tail listc) circ
 
 
 --Extrai Raios 
@@ -116,10 +111,24 @@ extraiRaio :: [Int] -> [Float]
 extraiRaio [] = []
 extraiRaio dataset = let 
                 a = (head dataset)
-                b = ((fromIntegral a)/100) + 3
+                b = ((fromIntegral a)/20) + 2
                 in b : extraiRaio (tail dataset)
                                             
 --Criando os circulos
 criaCirc :: [Circle] -> String
 criaCirc [] = []
-criaCirc listaCirc = svgCircle (head listaCirc) (cores) ++ criaCirc (tail listaCirc)
+criaCirc listaCirc = svgCircle (head listaCirc) ++ criaCirc (tail listaCirc)
+
+
+listaCirc :: [Circle] -> [Float] -> Float -> Point-> [Circle]
+listaCirc circ [] t centro = circ
+listaCirc circ dataset t centro = let
+                                    a = 0.0002
+                                    novaPos = posicaoCirculos circ a t (head dataset) centro
+                                    in listaCirc (circ ++ novaPos) (tail dataset) t centro
+
+geracao :: Float -> Float -> [Float] -> String
+geracao w h [] = []
+geracao w h raiosDataset = let                          
+                           geraCirc = listaCirc [((w,h),(head raiosDataset))] (tail raiosDataset) 0 (w,h)
+                           in criaCirc geraCirc
