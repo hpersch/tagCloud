@@ -55,15 +55,15 @@ svgBubbleGen w h dataset = let
                            raios = reverse (sort (extraiRaio dataset))
                            in [geracao (fromIntegral w/2) (fromIntegral h/2) raios]
 
---corolação
+--Gera as cores de forma randomica!
 cores ::  IO Int
 cores = randomRIO (0,255::Int)
            
-
 -- Gera string representando um circulo em SVG. A cor do circulo esta fixa. 
 -- TODO: Alterar esta funcao para mostrar um circulo de uma cor fornecida como parametro.
-svgCircle :: Circle -> String
-svgCircle ((x,y),raio) = printf "<circle cx=\"%f\" cy=\"%f\" r=\"%f\" fill=\"rgb(%d, %d, %d)\" />\n" x y raio (unsafePerformIO cores) (unsafePerformIO cores) (unsafePerformIO cores) 
+-- Recebe o circulo para impressao e as cores como parametro!
+svgCircle :: Circle -> Color -> String
+svgCircle ((x,y),raio) (r,g,b) = printf "<circle cx=\"%f\" cy=\"%f\" r=\"%f\" fill=\"rgb(%d, %d, %d)\" />\n" x y raio r g b 
 
 
 -- Configura o viewBox da imagem e coloca retangulo branco no fundo
@@ -74,61 +74,67 @@ svgViewBox w h =
         printf "<rect x=\"0\" y=\"0\" width=\"%d\" height=\"%d\" style=\"fill:white;\"/>\n" w h
         
 
---Gera a posicao dos Circulos
-posicaoCirculos :: [Circle] -> Float -> Float -> Float -> Point -> [Circle]
-posicaoCirculos circulo a t raio centro = 
-                        let ponto = testaPosicao centro a t
-                            ver = validaPonto circulo ((ponto), raio)
-                        in if (and ver == True) then [((ponto), raio)]
-                           else posicaoCirculos circulo a (t + 70) raio centro
+--Gera a posicao dos Circulos, analisando a distancia entre os circulos.
+posicaoCirculos :: [Circle] -> Float -> Point -> [Circle] -> Int -> [Circle]
+posicaoCirculos circulos t ponto [] c = []
+posicaoCirculos circulos t ponto circulo2 c = if analisaDistancia circulos (head circulo2) ponto == True 
+                                             then (ponto, (snd(head circulo2))) : posicaoCirculos novoCirc 0 (180, 180) (tail circulo2) (c+1)
+                                             else posicaoCirculos circulos (t + 0.1) (testaPosicao ponto t) circulo2 c
+                                             where novoCirc = novosCirculos c circulos ponto (snd (head circulo2))
 
-testaPosicao :: Point -> Float -> Float -> Point
-testaPosicao c a t = let
-                        x = (fst c) + (a * t * (cos t))
-                        y = (snd c) + (a * t * (sin t))
-                        in (x, y)
+--Cria uma nova posição a partir de um ponto e um t repassado.
+testaPosicao :: Point -> Float -> Point
+testaPosicao p t = let
+                        x1 = (fst p) + (0.01 * t * (sin (t + 0.01)))
+                        y1 = (snd p) + (0.01 * t * (cos (t + 0.01)))
+                        in (x1, y1)
+
+--Cria novos circulos com novas posições e insere novamente.
+novosCirculos :: Int -> [Circle] -> Point -> Float -> [Circle]
+novosCirculos c circulos ponto raio = [a | a <- (take c circulos) ++ [((ponto), raio)]]
                         
---Distancia dos circulos
+-- Caculo das Distancia dos circulos utilizado para a validação do ponto.
 distanciaCirc :: Point -> Point -> Float
 distanciaCirc (a1, b1) (a2, b2) = let
-                                x = (a2 - a1) ^ 2
-                                y = (b2 - b1) ^ 2
+                                x = (a2 - a1)^2
+                                y = (b2 - b1)^2
                                 d = x + y
                                 in sqrt d 
+ 
+--Analisa a distancia, caso seja válida retorna TRUE senão retorna False.
+analisaDistancia :: [Circle] -> Circle -> Point -> Bool
+analisaDistancia circulos (p, r2) ponto = if (validaPonto ponto circulos r2) == 0 then True else False
 
---Analisa a distancia
-analisaDistancia :: Circle -> Circle -> Bool
-analisaDistancia ((x1,y1), r1) ((x2,y2), r2) = if (distanciaCirc (x1,y1) (x2,y2)) >= 0.1 then True else False
-
---Verifica ponto a ponto
-validaPonto :: [Circle] -> Circle -> [Bool]
-validaPonto [] _ = []
-validaPonto listc circ = analisaDistancia (head listc) circ : validaPonto (tail listc) circ
-
+--Verifica ponto a ponto.. Chama as funções de distancia para analisar se o ponto é válido ou não.
+validaPonto :: Point -> [Circle] -> Float -> Int
+validaPonto p [] raio = 0
+validaPonto p listc raio = if distF >= 0.1 then 0 + (validaPonto p (tail listc) raio) else 1
+                           where
+                           dist = distanciaCirc p (fst (head listc))
+                           distF = dist - ((snd (head listc)) + raio)
+--Caso seja válido, retorna 0, caso não seja válido retorna 1.
 
 --Extrai Raios 
 extraiRaio :: [Int] -> [Float]
 extraiRaio [] = []
 extraiRaio dataset = let 
                 a = (head dataset)
-                b = ((fromIntegral a)/20) + 2
+                b = (sqrt(fromIntegral a))+ 0.5 --tira a raiz e acrescenta 0.5, para os circulos bem pequenos apararecerem.
                 in b : extraiRaio (tail dataset)
                                             
---Criando os circulos
-criaCirc :: [Circle] -> String
-criaCirc [] = []
-criaCirc listaCirc = svgCircle (head listaCirc) ++ criaCirc (tail listaCirc)
+--Criando os circulos, gerando a string com cada um dos circulos..
+imprimeCriaCirc :: [Circle] -> String
+imprimeCriaCirc [] = []
+imprimeCriaCirc listaCirc = svgCircle (head listaCirc) (unsafePerformIO cores, unsafePerformIO cores, unsafePerformIO cores) ++ imprimeCriaCirc (tail listaCirc)
 
+--Cria uma lista com todos os circulos desenhados já, no centro da figura.
+criaCirc :: Circle -> [Float] -> [Circle]
+criaCirc circ [] = []
+criaCirc circ raiosDataset = circ : criaCirc ((180, 180), (head (tail raiosDataset))) (tail raiosDataset)
 
-listaCirc :: [Circle] -> [Float] -> Float -> Point-> [Circle]
-listaCirc circ [] t centro = circ
-listaCirc circ dataset t centro = let
-                                    a = 0.0002
-                                    novaPos = posicaoCirculos circ a t (head dataset) centro
-                                    in listaCirc (circ ++ novaPos) (tail dataset) t centro
-
+--Cria todos os circulos e depois ordena a posição de cada um deles.
 geracao :: Float -> Float -> [Float] -> String
-geracao w h [] = []
-geracao w h raiosDataset = let                          
-                           geraCirc = listaCirc [((w,h),(head raiosDataset))] (tail raiosDataset) 0 (w,h)
-                           in criaCirc geraCirc
+geracao x y raiosDataset = let
+                           cria = criaCirc ((x, y), (head raiosDataset)) raiosDataset
+                           insere = head cria :  posicaoCirculos [((x,y),(head raiosDataset))] 0 (x,y) (tail cria) 1
+                           in imprimeCriaCirc insere
